@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>🚕 Driver GPS · Tech Blue Fleet</title>
+<meta name="color-scheme" content="dark" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+:root{
+  --bg0:#050914;
+  --bg1:#081429;
+  --panel:rgba(13,25,52,.92);
+  --line:rgba(74,195,255,.24);
+  --line2:rgba(31,139,255,.44);
+  --text:#eaf4ff;
+  --muted:#9db8d8;
+  --blue:#1f8bff;
+  --cyan:#4ac3ff;
+  --green:#2ee59d;
+  --red:#ff4d6d;
+  --yellow:#ffd166;
+  --shadow:0 18px 50px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  color:var(--text);
+  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:radial-gradient(circle at 20% 0%,rgba(31,139,255,.24),transparent 35%),
+             radial-gradient(circle at 100% 10%,rgba(74,195,255,.16),transparent 35%),
+             linear-gradient(180deg,var(--bg0),var(--bg1));
+}
+.wrap{width:min(720px,100%);margin:0 auto;padding:16px;padding-bottom:28px}
+.hero{
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,var(--panel),rgba(9,18,39,.94));
+  box-shadow:var(--shadow);
+  border-radius:28px;
+  padding:18px;
+  margin-top:14px;
+  overflow:hidden;
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.logo{
+  width:52px;height:52px;border-radius:18px;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--blue),var(--cyan));
+  box-shadow:0 0 24px rgba(74,195,255,.35);
+  font-size:28px;
+}
+h1{margin:0;font-size:22px;line-height:1.1}
+.muted{color:var(--muted)}
+.card{
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.04);
+  border-radius:22px;
+  padding:14px;
+  margin-top:12px;
+}
+label{display:block;font-size:12px;color:var(--muted);font-weight:900;margin:0 0 6px;text-transform:uppercase;letter-spacing:.6px}
+select,input{
+  width:100%;
+  padding:13px 14px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:rgba(4,10,24,.82);
+  color:var(--text);
+  outline:none;
+  font-size:16px;
+}
+button{
+  width:100%;
+  border:1px solid var(--line2);
+  background:linear-gradient(135deg,rgba(31,139,255,.96),rgba(74,195,255,.78));
+  color:white;
+  border-radius:18px;
+  padding:15px 14px;
+  cursor:pointer;
+  font-weight:950;
+  font-size:16px;
+  box-shadow:0 12px 28px rgba(31,139,255,.22);
+  margin-top:10px;
+}
+button.stop{background:linear-gradient(135deg,#ff416c,#ff4d4d);border-color:rgba(255,77,109,.6)}
+button.secondary{background:rgba(255,255,255,.055);box-shadow:none}
+.status{
+  display:grid;
+  gap:8px;
+  margin-top:10px;
+}
+.pill{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.045);
+  border-radius:16px;
+  padding:10px 12px;
+  color:var(--muted);
+  font-weight:800;
+}
+.ok{color:var(--green)}
+.bad{color:var(--red)}
+.warn{color:var(--yellow)}
+#map{height:300px;border-radius:20px;overflow:hidden;border:1px solid var(--line);background:#061126;margin-top:12px}
+.notice{
+  border:1px solid rgba(255,209,102,.35);
+  background:rgba(255,209,102,.08);
+  color:#ffe7a3;
+  padding:12px;
+  border-radius:18px;
+  font-size:14px;
+  line-height:1.45;
+}
+.small{font-size:12px;line-height:1.45}
+.hidden{display:none!important}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#071126;color:#eaf4ff;border:1px solid rgba(74,195,255,.35)}
+.leaflet-control-attribution{background:rgba(5,9,20,.7)!important;color:#9db8d8!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="brand">
+      <div class="logo">🚕</div>
+      <div>
+        <h1>Driver GPS</h1>
+        <div class="muted">Tech Blue Fleet · Modo conductor</div>
+      </div>
+    </div>
+
+    <div class="notice">
+      Esta página es solo para enviar ubicación del taxi. Mantén la página abierta mientras estés trabajando.
+    </div>
+
+    <div class="card">
+      <label>Selecciona tu taxi</label>
+      <select id="taxiSelect"></select>
+      <button onclick="startGPS()">📡 Activar GPS</button>
+      <button class="stop" onclick="stopGPS()">⏹️ Detener GPS</button>
+      <button class="secondary" onclick="refreshTaxis()">🔄 Actualizar lista de taxis</button>
+    </div>
+
+    <div class="card">
+      <label>Estado de conexión</label>
+      <div class="status">
+        <div class="pill"><span>GPS</span><b id="gpsStatus" class="warn">Esperando</b></div>
+        <div class="pill"><span>Taxi</span><b id="taxiStatus">No seleccionado</b></div>
+        <div class="pill"><span>Última señal</span><b id="lastSignal">-</b></div>
+        <div class="pill"><span>Precisión</span><b id="accuracy">-</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Tu ubicación actual</label>
+      <div id="map"></div>
+      <p class="muted small">Si el mapa no se mueve, verifica que el celular tenga ubicación activa y permiso para el navegador.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SUPABASE_URL = "https://drbecawlairmgizftryn.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZWJlY2F3bGFpcm1naXpmdHJ5biIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc3NDk3MDU0LCJleHAiOjIwOTMwNzMwNTR9.B3rV8KUY7eloKnyjwbiyok3jsp_YS9Pt0_efHOKjm88";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let taxis = [];
+let watchId = null;
+let map = null;
+let marker = null;
+
+function getParam(name){
+  return new URLSearchParams(location.search).get(name);
+}
+
+function setText(id,text,cls){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  if(cls){ el.className = cls; }
+}
+
+function initMap(){
+  if(map) return;
+  map = L.map('map').setView([3.4516,-76.5320],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  setTimeout(()=>map.invalidateSize(),300);
+}
+
+function updateMap(lat,lng,taxiName){
+  initMap();
+  const pos = [lat,lng];
+  if(marker){
+    marker.setLatLng(pos).setPopupContent(`<b>${taxiName}</b><br>GPS activo`);
+  }else{
+    marker = L.marker(pos).addTo(map).bindPopup(`<b>${taxiName}</b><br>GPS activo`);
+  }
+  map.setView(pos,16);
+}
+
+async function refreshTaxis(){
+  setText('gpsStatus','Cargando taxis...','warn');
+  const { data, error } = await supabase.from('taxis').select('*').order('name',{ascending:true});
+  if(error){
+    alert('No se pudo cargar taxis: ' + error.message);
+    setText('gpsStatus','Error','bad');
+    return;
+  }
+
+  taxis = data || [];
+  const select = document.getElementById('taxiSelect');
+
+  if(!taxis.length){
+    select.innerHTML = `<option value="">No hay taxis creados</option>`;
+    setText('gpsStatus','Sin taxis','bad');
+    return;
+  }
+
+  select.innerHTML = taxis.map(t => `<option value="${t.id}">${t.name || t.id} ${t.plate ? '· '+t.plate : ''}</option>`).join('');
+
+  const taxiParam = getParam('taxi');
+  if(taxiParam && taxis.find(t => String(t.id) === String(taxiParam))){
+    select.value = taxiParam;
+  }
+
+  updateTaxiLabel();
+  setText('gpsStatus','Listo','ok');
+}
+
+function selectedTaxi(){
+  const id = document.getElementById('taxiSelect').value;
+  return taxis.find(t => String(t.id) === String(id));
+}
+
+function updateTaxiLabel(){
+  const t = selectedTaxi();
+  setText('taxiStatus', t ? `${t.name || t.id} ${t.plate ? '· '+t.plate : ''}` : 'No seleccionado');
+}
+
+document.getElementById('taxiSelect').addEventListener('change', updateTaxiLabel);
+
+async function sendLocationToCloud(taxi,lat,lng,accuracy){
+  const { error } = await supabase.from('taxis').upsert({
+    id: String(taxi.id),
+    name: taxi.name || '',
+    plate: taxi.plate || '',
+    lat,
+    lng,
+    status: taxi.status || 'Activo',
+    updated_at: new Date().toISOString()
+  });
+
+  if(error){
+    setText('gpsStatus','Error nube','bad');
+    console.warn(error.message);
+    return;
+  }
+
+  setText('gpsStatus','Transmitiendo','ok');
+  setText('lastSignal',new Date().toLocaleTimeString());
+  setText('accuracy',accuracy ? Math.round(accuracy)+' m' : '-');
+  updateMap(lat,lng,taxi.name || taxi.id);
+}
+
+function startGPS(){
+  const taxi = selectedTaxi();
+  if(!taxi) return alert('Primero selecciona tu taxi.');
+  if(!navigator.geolocation) return alert('Este celular/navegador no soporta GPS.');
+  if(watchId !== null) return alert('El GPS ya está activo.');
+
+  updateTaxiLabel();
+  setText('gpsStatus','Pidiendo permiso...','warn');
+
+  watchId = navigator.geolocation.watchPosition(async pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const acc = pos.coords.accuracy;
+    await sendLocationToCloud(taxi,lat,lng,acc);
+  }, err => {
+    setText('gpsStatus','Bloqueado','bad');
+    alert('No se pudo activar GPS: ' + err.message);
+    stopGPS(false);
+  }, {
+    enableHighAccuracy:true,
+    maximumAge:5000,
+    timeout:15000
+  });
+}
+
+function stopGPS(showAlert=true){
+  if(watchId !== null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    setText('gpsStatus','Detenido','warn');
+    if(showAlert) alert('GPS detenido.');
+  }
+}
+
+window.addEventListener('beforeunload', () => stopGPS(false));
+initMap();
+refreshTaxis();
+</script>
+</body>
+</html>
