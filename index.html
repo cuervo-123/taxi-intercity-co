@@ -350,6 +350,7 @@ function hardReset(){if(confirm('BORRAR TODO el sistema local?')){localStorage.r
 render();
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 let fleetMap=null;
 let fleetMarkers={};
@@ -432,5 +433,134 @@ const oldShowView=showView;
 showView=function(id,btn){oldShowView(id,btn); if(id==='mapView')setTimeout(()=>{updateMap();centerMap();},300);};
 setTimeout(()=>{render();updateMap();},500);
 </script>
+
+<script>
+/* =========================================================
+   TECH BLUE FLEET · SUPABASE GPS REALTIME PATCH
+   Proyecto: drbecawlairmgizftryn
+   Modo 1: ubicación manual guardada en nube
+   Modo 2: GPS celular guardado en nube
+   Admin: lee taxis desde nube cada 3 segundos
+========================================================= */
+const SUPABASE_URL_REALTIME = "https://drbecawlairmgizftryn.supabase.co";
+const SUPABASE_ANON_KEY_REALTIME = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyYmVjYXdsYWlybWdpemZ0cnluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTcwNTQsImV4cCI6MjA5MzA3MzA1NH0.B3rV8KUY7eloKnyjwbiyok3jsp_YS9Pt0_efHOKjm88";
+const fleetSupabase = window.supabase.createClient(SUPABASE_URL_REALTIME, SUPABASE_ANON_KEY_REALTIME);
+let cloudReady = false;
+
+async function ensureCloudTableReady(){
+  // Nota: La tabla debe existir en Supabase. Si no existe, el sistema avisa.
+  const { error } = await fleetSupabase.from('taxis').select('id').limit(1);
+  if(error){
+    console.warn('Supabase todavía no está listo:', error.message);
+    cloudReady = false;
+    return false;
+  }
+  cloudReady = true;
+  return true;
+}
+
+async function saveTaxiLocationToCloud(t){
+  if(!t || !t.id) return;
+  if(!cloudReady) await ensureCloudTableReady();
+  if(!cloudReady) return;
+  const { error } = await fleetSupabase.from('taxis').upsert({
+    id: String(t.id),
+    name: t.name || '',
+    plate: t.plate || '',
+    lat: Number(t.lat),
+    lng: Number(t.lng),
+    status: t.status || 'Activo',
+    updated_at: new Date().toISOString()
+  });
+  if(error) console.warn('Error guardando GPS en nube:', error.message);
+}
+
+async function loadGPSFromCloud(){
+  if(!cloudReady) await ensureCloudTableReady();
+  if(!cloudReady) return;
+  const { data, error } = await fleetSupabase.from('taxis').select('*');
+  if(error){ console.warn('Error leyendo GPS nube:', error.message); return; }
+  (data || []).forEach(remote => {
+    let local = db.taxis.find(x => String(x.id) === String(remote.id));
+    if(local){
+      local.lat = remote.lat;
+      local.lng = remote.lng;
+      local.lastGps = remote.updated_at ? 'Nube · ' + new Date(remote.updated_at).toLocaleString() : 'Nube';
+      if(remote.name && !local.name) local.name = remote.name;
+      if(remote.plate && !local.plate) local.plate = remote.plate;
+      if(remote.status) local.status = remote.status;
+    }
+  });
+  localStorage.setItem(STORE, JSON.stringify(db));
+  try { updateMap(); renderGpsTable(); } catch(e) {}
+}
+
+// Reemplazo seguro del botón Manual: guarda local + nube
+setLocationManual = async function(id){
+  if(!requireManage()) return;
+  const t = db.taxis.find(x => x.id === id);
+  if(!t) return alert('Taxi no encontrado');
+  const current = (t.lat && t.lng) ? `${t.lat}, ${t.lng}` : '3.4516, -76.5320';
+  const val = prompt(`Coordenadas para ${t.name}
+Formato: lat,lng`, current);
+  if(!val) return;
+  const parts = val.split(',').map(x => Number(x.trim()));
+  if(parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])){
+    return alert('Formato inválido. Ejemplo: 3.4516, -76.5320');
+  }
+  t.lat = parts[0];
+  t.lng = parts[1];
+  t.lastGps = 'Manual + Nube · ' + new Date().toLocaleString();
+  save();
+  await saveTaxiLocationToCloud(t);
+  updateMap();
+};
+
+// Reemplazo seguro del botón GPS: celular manda ubicación a Supabase
+startTracking = function(id){
+  const t = db.taxis.find(x => x.id === id);
+  if(!t) return alert('Taxi no encontrado');
+  if(!navigator.geolocation) return alert('Este navegador no soporta GPS.');
+  if(typeof gpsWatchers === 'undefined') window.gpsWatchers = {};
+  if(gpsWatchers[id]) return alert('GPS ya está activo para ' + t.name);
+
+  gpsWatchers[id] = navigator.geolocation.watchPosition(async pos => {
+    t.lat = pos.coords.latitude;
+    t.lng = pos.coords.longitude;
+    t.accuracy = Math.round(pos.coords.accuracy || 0);
+    t.lastGps = 'GPS celular + Nube · ' + new Date().toLocaleString();
+    localStorage.setItem(STORE, JSON.stringify(db));
+    await saveTaxiLocationToCloud(t);
+    try { render(); updateMap(); } catch(e) {}
+  }, err => {
+    alert('No se pudo activar GPS: ' + err.message);
+  }, {
+    enableHighAccuracy: true,
+    maximumAge: 5000,
+    timeout: 15000
+  });
+
+  alert('GPS activo para ' + t.name + '. Mantén esta página abierta en el celular.');
+};
+
+stopTracking = function(id){
+  if(typeof gpsWatchers !== 'undefined' && gpsWatchers[id]){
+    navigator.geolocation.clearWatch(gpsWatchers[id]);
+    delete gpsWatchers[id];
+    alert('GPS detenido.');
+  }
+};
+
+// Auto lectura de nube para que el dueño vea los taxis en vivo
+setTimeout(async () => {
+  const ok = await ensureCloudTableReady();
+  if(!ok){
+    console.warn('IMPORTANTE: crea la tabla taxis en Supabase con SQL antes de usar GPS nube.');
+  }
+  loadGPSFromCloud();
+}, 1000);
+setInterval(loadGPSFromCloud, 3000);
+</script>
 </body>
 </html>
+
