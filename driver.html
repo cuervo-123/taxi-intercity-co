@@ -166,7 +166,7 @@ button.secondary{background:rgba(255,255,255,.055);box-shadow:none}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const SUPABASE_URL = "https://drbecawlairmgizftryn.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZWJlY2F3bGFpcm1naXpmdHJ5biIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc3NDk3MDU0LCJleHAiOjIwOTMwNzMwNTR9.B3rV8KUY7eloKnyjwbiyok3jsp_YS9Pt0_efHOKjm88";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyYmVjYXdsYWlybWdpemZ0cnluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTcwNTQsImV4cCI6MjA5MzA3MzA1NH0.B3rV8KUY7eloKnyjwbiyok3jsp_YS9Pt0_efHOKjm88";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let taxis = [];
@@ -206,8 +206,11 @@ async function refreshTaxis(){
   setText('gpsStatus','Cargando taxis...','warn');
   const { data, error } = await supabase.from('taxis').select('*').order('name',{ascending:true});
   if(error){
-    alert('No se pudo cargar taxis: ' + error.message);
-    setText('gpsStatus','Error','bad');
+    console.error('Error cargando taxis:', error);
+    alert('No se pudo cargar taxis desde Supabase: ' + error.message + '
+
+Revisa que la tabla taxis exista y que las policies estén activas.');
+    setText('gpsStatus','Error Supabase','bad');
     return;
   }
 
@@ -215,8 +218,9 @@ async function refreshTaxis(){
   const select = document.getElementById('taxiSelect');
 
   if(!taxis.length){
-    select.innerHTML = `<option value="">No hay taxis creados</option>`;
+    select.innerHTML = `<option value="">No hay taxis en Supabase todavía</option>`;
     setText('gpsStatus','Sin taxis','bad');
+    alert('La conexión funciona, pero la tabla taxis está vacía. Abre el panel del dueño, entra a Flota, crea un taxi y usa 📍 Manual o 📡 GPS una vez para subirlo a Supabase.');
     return;
   }
 
