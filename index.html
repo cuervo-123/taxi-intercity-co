@@ -107,7 +107,7 @@ table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:16px}th,
         <div class="f12"><p class="label">Taxi asignado</p><select id="driverTaxi"></select></div>
         <div class="f12"><button onclick="addDriver()">Guardar conductor</button></div>
       </div></div>
-      <div class="card span8"><h2>👨‍✈️ Conductores</h2><div class="scroll"><table id="driversTable"></table></div></div>
+      <div class="card span8"><div class="split"><h2>👨‍✈️ Conductores</h2><button class="danger" onclick="clearAllDrivers()">🗑️ Borrar todos los conductores</button></div><div class="scroll"><table id="driversTable"></table></div></div>
     </div>
   </section>
 
@@ -258,7 +258,22 @@ async function editTaxi(id){let t=db.taxis.find(x=>x.id===id);let v=prompt('Nuev
 async function editDriverCode(id){let t=db.taxis.find(x=>x.id===id);let v=prompt('Nuevo código para conductor',t.driver_code||'');if(v!==null){t.driver_code=v.trim();save();await syncTaxiToCloud(t);alert('Código actualizado.');}}
 
 function addDriver(){if(!requireManage())return;let name=driverName.value.trim();if(!name)return alert('Falta nombre');db.drivers.push({id:uid(),name,phone:driverPhone.value.trim(),shift:driverShift.value,taxiId:driverTaxi.value,status:'Activo',created:today()});driverName.value=driverPhone.value='';save();}
-function removeDriver(id){if(confirm('¿Eliminar conductor?')){db.drivers=db.drivers.filter(d=>d.id!==id);save();}}
+function removeDriver(id){
+  if(confirm('¿Eliminar conductor?')){
+    db.drivers = db.drivers.filter(d => String(d.id) !== String(id));
+    save();
+    renderDrivers();
+    renderSelectors();
+  }
+}
+function clearAllDrivers(){
+  if(!confirm('¿Borrar TODOS los conductores guardados en este navegador?')) return;
+  db.drivers = [];
+  save();
+  renderDrivers();
+  renderSelectors();
+  alert('Conductores eliminados.');
+}
 function addPayment(){if(!requireManage())return;let amount=Number(payAmount.value||0);if(!amount)return alert('Falta monto');db.payments.push({id:uid(),date:today(),taxiId:payTaxi.value,driverId:payDriver.value,amount,shift:payShift.value,note:payNote.value.trim(),user:activeUser().name});payAmount.value=payNote.value='';save();}
 function addExpense(){if(!requireManage())return;let amount=Number(expenseAmount.value||0);if(!amount)return alert('Falta monto');db.expenses.push({id:uid(),date:today(),taxiId:expenseTaxi.value,category:expenseCategory.value,amount,note:expenseNote.value.trim(),user:activeUser().name});expenseAmount.value=expenseNote.value='';save();}
 function addMaintenance(){if(!requireManage())return;db.maintenance.push({id:uid(),date:today(),taxiId:maintTaxi.value,type:maintType.value,nextKm:Number(maintKm.value||0),note:maintNote.value.trim(),status:'Pendiente'});maintKm.value=maintNote.value='';save();}
