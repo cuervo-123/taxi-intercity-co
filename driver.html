@@ -20,6 +20,8 @@
     <div class="card">
       <label>Selecciona tu taxi</label>
       <select id="taxiSelect"><option>Cargando...</option></select>
+      <label style="margin-top:12px">Código secreto del conductor</label>
+      <input id="driverCode" type="password" placeholder="Código asignado por el dueño">
       <button id="btnStart">📡 Activar GPS</button>
       <button id="btnStop" class="stop">⏹️ Detener GPS</button>
       <button id="btnRefresh" class="secondary">🔄 Actualizar lista de taxis</button>
@@ -37,6 +39,7 @@
       <div class="pill"><span>Supabase</span><b id="cloudStatus" class="warn">Sin probar</b></div>
       <div class="pill"><span>Taxis nube</span><b id="cloudCount">-</b></div>
       <div class="pill"><span>Taxi activo</span><b id="taxiStatus">No seleccionado</b></div>
+      <div class="pill"><span>Permiso</span><b id="accessStatus" class="warn">Sin validar</b></div>
       <div class="pill"><span>GPS</span><b id="gpsStatus" class="warn">Esperando</b></div>
       <div class="pill"><span>Última señal</span><b id="lastSignal">-</b></div>
       <div class="pill"><span>Precisión</span><b id="accuracy">-</b></div>
@@ -142,6 +145,33 @@
     setText('gpsStatus','Taxi manual listo','ok');
     log('Taxi manual seleccionado: ' + id);
   }
+  function validateDriverAccess(taxi){
+    if(!taxi){
+      setText('accessStatus','Sin taxi','bad');
+      return false;
+    }
+    const typed = (el('driverCode').value || '').trim();
+    const required = (taxi.driver_code || '').trim();
+
+    if(!required){
+      setText('accessStatus','Taxi sin código','bad');
+      alert('Este taxi todavía no tiene código de conductor en Supabase. El dueño debe asignarlo.');
+      return false;
+    }
+    if(!typed){
+      setText('accessStatus','Falta código','bad');
+      alert('Escribe el código secreto asignado por el dueño.');
+      return false;
+    }
+    if(typed !== required){
+      setText('accessStatus','Código incorrecto','bad');
+      alert('Código incorrecto para este taxi.');
+      return false;
+    }
+    setText('accessStatus','Autorizado','ok');
+    return true;
+  }
+
   async function sendLocationToCloud(taxi, lat, lng, accuracy){
     const payload = {
       id: String(taxi.id),
@@ -166,7 +196,8 @@
   }
   function startGPS(){
     const taxi = selectedTaxi();
-    if(!taxi){ alert('Primero selecciona un taxi o escribe uno manual.'); return; }
+    if(!taxi){ alert('Primero selecciona un taxi.'); return; }
+    if(!validateDriverAccess(taxi)) return;
     if(!navigator.geolocation){ alert('Este celular/navegador no soporta GPS.'); return; }
     if(watchId !== null){ alert('El GPS ya está activo.'); return; }
     updateTaxiLabel();
@@ -206,7 +237,8 @@
     el('btnStart').addEventListener('click', startGPS);
     el('btnStop').addEventListener('click', () => stopGPS(true));
     el('btnManual').addEventListener('click', useManualTaxi);
-    el('taxiSelect').addEventListener('change', () => { manualTaxi = null; updateTaxiLabel(); });
+    el('taxiSelect').addEventListener('change', () => { manualTaxi = null; updateTaxiLabel(); setText('accessStatus','Sin validar','warn'); });
+    el('driverCode').addEventListener('input', () => setText('accessStatus','Sin validar','warn'));
     refreshTaxis();
   }
   window.addEventListener('beforeunload', () => stopGPS(false));
