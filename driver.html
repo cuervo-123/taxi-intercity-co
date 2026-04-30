@@ -207,9 +207,7 @@ async function refreshTaxis(){
   const { data, error } = await supabase.from('taxis').select('*').order('name',{ascending:true});
   if(error){
     console.error('Error cargando taxis:', error);
-    alert('No se pudo cargar taxis desde Supabase: ' + error.message + '
-
-Revisa que la tabla taxis exista y que las policies estén activas.');
+    alert('No se pudo cargar taxis desde Supabase: ' + error.message + '\n\nRevisa que la tabla taxis exista y que las policies estén activas.');
     setText('gpsStatus','Error Supabase','bad');
     return;
   }
